@@ -6,7 +6,7 @@
     "name": "zumiko",
     "url": "https://github.com/zumiko"
   },
-  "homepage": "https://github.com/zumiko/claudecoplay",
+  "homepage": "https://zumiko.github.io/claudecoplay",
   "repository": "https://github.com/zumiko/claudecoplay",
   "keywords": ["games", "tmux", "snake", "tetris", "asteroids", "attention", "focus"],
   "license": "MIT"

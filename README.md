@@ -19,6 +19,8 @@ needs you** — a permission prompt, a clarifying question, or finishing — and
 Games: **`/snake`**, **`/tetris`**, **`/asteroids`**. Status and high scores:
 **`/coplay`**.
 
+**[zumiko.github.io/claudecoplay](https://zumiko.github.io/claudecoplay)**
+
 Focus moves for you: the game takes the keyboard while Claude works and gives
 it back when Claude needs an answer.
 

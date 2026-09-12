@@ -44,6 +44,25 @@
   }
   @media (max-width:1180px){ #ambient,#blocks{display:none} main{border:0} }
 
+  /* Phones. The ASCII panes cannot reflow, so the type shrinks a little and
+     the hero switches to a stacked layout in JS; between them every line fits
+     on screen without a horizontal scroll. */
+  @media (max-width:640px){
+    body{font-size:13px}
+    main{padding:1.6rem 1rem 3rem}
+    h1{font-size:1.15rem}
+    h2{margin:2.2rem 0 .8rem}
+    pre.pane{font-size:11.5px;line-height:1.2}
+    .cmd{padding:.7rem .8rem}
+    .cmd pre{font-size:11.5px}
+    .demos{gap:1.1rem}
+    .demo{width:100%}
+    table{font-size:12px}
+    th,td{padding-right:.9rem}
+    /* Long shell lines in copy blocks wrap instead of scrolling sideways. */
+    .cmd pre{white-space:pre-wrap;overflow-wrap:anywhere}
+  }
+
   a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--faint)}
   a:hover{border-bottom-color:var(--accent)}
   h1{font-size:1.3rem;font-weight:600;margin:0;letter-spacing:.02em}
@@ -535,7 +554,6 @@ Asteroids.prototype.draw = function (g) {
 // HERO: an ASCII mock of the real tmux split that demonstrates the one idea
 // behind the whole plugin -- Claude works, you play; Claude asks, you freeze.
 // ---------------------------------------------------------------------------
-var LW = 42, RW = 34, BODY = 16;
 var TOOL_LINES = [
   '* Read upload.ts',
   '* Edit upload.ts',
@@ -549,45 +567,78 @@ var SPIN = ['-', '\\', '|', '/'];
 var heroEl = document.getElementById('hero');
 var capEl = document.getElementById('herocap');
 var GAMES = ['snake', 'tetris', 'asteroids'];
-var hero = { phase: 'work', t: 0, cycle: 0, sim: null, kind: '', spin: 0, answered: false };
+var hero = { phase: 'work', t: 0, cycle: 0, sim: null, kind: '', spin: 0, answered: false, sig: '' };
 
-function heroNewGame() {
+// Width of one character in the pane font, measured rather than assumed so the
+// layout is right whatever monospace font the browser actually picked.
+var charW = 0;
+function measureChar() {
+  if (charW) return charW;
+  var probe = document.createElement('span');
+  probe.textContent = '0'.repeat(40);
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+  probe.style.font = getComputedStyle(heroEl).font;
+  document.body.appendChild(probe);
+  charW = probe.getBoundingClientRect().width / 40 || 7.8;
+  document.body.removeChild(probe);
+  return charW;
+}
+
+// The mock is ASCII, so it cannot reflow -- it has to be laid out to fit. Wide
+// enough and the two panes sit side by side like a real tmux split; on a phone
+// they stack instead, which keeps every line inside the screen rather than
+// forcing a horizontal scroll across the most important thing on the page.
+function heroLayout() {
+  var avail = Math.floor((heroEl.clientWidth || 700) / measureChar());
+  if (avail >= 78) return { mode: 'side', lw: 42, rw: 34, body: 16 };
+  // -3 not -1: the pane spends two characters on its own left and right
+  // borders, plus one spare so a full-width line never touches the edge.
+  var w = Math.max(26, Math.min(46, avail - 3));
+  return { mode: 'stack', lw: w, rw: w, body: 8, gbody: 13 };
+}
+
+function heroNewGame(L) {
   hero.kind = GAMES[hero.cycle % GAMES.length];
-  var gw = RW - 2, gh = BODY - 4;
+  var gw = L.rw - 2;
+  var gh = (L.mode === 'side' ? L.body : L.gbody) - 4;
   if (hero.kind === 'snake') hero.sim = new Snake(gw, gh);
   else if (hero.kind === 'tetris') hero.sim = new Tetris(Math.min(10, (gw / 2) | 0), gh, 1, true);
   else hero.sim = new Asteroids(gw, gh);
 }
-heroNewGame();
 
 function heroFrame() {
+  var L = heroLayout();
+  var sig = L.mode + L.lw + L.rw;
+  if (sig !== hero.sig) { hero.sig = sig; heroNewGame(L); }
+
   var working = hero.phase === 'work';
   hero.spin = (hero.spin + 1) % (SPIN.length * 3);
   if (working) hero.sim.step();
 
   // ---- left pane: a plausible Claude transcript --------------------------
+  var body = L.mode === 'side' ? L.body : L.body;
   var left = [];
   left.push('> add retry logic to the uploader');
   left.push('');
   if (working) {
-    var shown = Math.min(TOOL_LINES.length, 1 + Math.floor(hero.t / 9));
+    var room = body - 4;
+    var shown = Math.min(TOOL_LINES.length, room, 1 + Math.floor(hero.t / 9));
     for (var i = 0; i < shown; i++) left.push(TOOL_LINES[i]);
     left.push('  ' + SPIN[(hero.spin / 3 | 0) % SPIN.length] + ' working');
   } else {
-    left.push(TOOL_LINES[0]);
-    left.push(TOOL_LINES[1]);
-    left.push(TOOL_LINES[2]);
+    left.push('* Bash(npm test)');
     left.push('');
     left.push('Allow Bash(npm publish)?');
     left.push('');
-    left.push((hero.answered ? ' >' : ' >') + ' 1. Yes');
+    left.push(' > 1. Yes');
     left.push('   2. No, tell Claude what to do');
-    if (hero.answered) left.push('');
   }
-  while (left.length < BODY) left.push('');
+  while (left.length < body) left.push('');
+  left = left.slice(0, body);
 
   // ---- right pane: the game, frozen unless Claude is working -------------
-  var gw = RW - 2, gh = BODY - 4;
+  var gw = L.rw - 2;
+  var gh = (L.mode === 'side' ? L.body : L.gbody) - 4;
   var gg = grid(gw, gh, ' ');
   if (hero.kind === 'tetris') hero.sim.draw(gg, 0, 0, 2);
   else hero.sim.draw(gg);
@@ -600,15 +651,25 @@ function heroFrame() {
   for (var r = 0; r < gh; r++) right.push('|' + pad(grows[r] || '', gw).slice(0, gw) + '|');
   right.push('+' + '-'.repeat(gw) + '+');
   right.push(working ? ' arrows to play' : ' [PAUSED] Claude needs you');
-  while (right.length < BODY) right.push('');
 
-  // ---- stitch the two panes together ------------------------------------
+  // ---- stitch ------------------------------------------------------------
   var out = [];
-  out.push('+' + label(' CLAUDE ', LW) + '+' + label(' ' + title + ' ', RW) + '+');
-  for (var b = 0; b < BODY; b++) {
-    out.push('|' + pad(' ' + left[b], LW) + '|' + pad(right[b], RW) + '|');
+  if (L.mode === 'side') {
+    while (right.length < body) right.push('');
+    out.push('+' + label(' CLAUDE ', L.lw) + '+' + label(' ' + title + ' ', L.rw) + '+');
+    for (var b = 0; b < body; b++) {
+      out.push('|' + pad(' ' + left[b], L.lw) + '|' + pad(right[b], L.rw) + '|');
+    }
+    out.push('+' + '-'.repeat(L.lw) + '+' + '-'.repeat(L.rw) + '+');
+  } else {
+    out.push('+' + label(' CLAUDE ', L.lw) + '+');
+    for (var b2 = 0; b2 < body; b2++) out.push('|' + pad(' ' + left[b2], L.lw) + '|');
+    out.push('+' + '-'.repeat(L.lw) + '+');
+    out.push('');
+    out.push('+' + label(' ' + title + ' ', L.rw) + '+');
+    for (var b3 = 0; b3 < right.length; b3++) out.push('|' + pad(right[b3], L.rw) + '|');
+    out.push('+' + '-'.repeat(L.rw) + '+');
   }
-  out.push('+' + '-'.repeat(LW) + '+' + '-'.repeat(RW) + '+');
   heroEl.textContent = out.join('\n');
 
   var word = working ? 'WORKING' : 'PAUSED';
@@ -622,7 +683,7 @@ function heroFrame() {
   if (working && hero.t > 78) { hero.phase = 'ask'; hero.t = 0; hero.answered = false; }
   else if (!working && hero.t === 46) { hero.answered = true; }
   else if (!working && hero.t > 56) {
-    hero.phase = 'work'; hero.t = 0; hero.cycle++; heroNewGame();
+    hero.phase = 'work'; hero.t = 0; hero.cycle++; heroNewGame(heroLayout());
   }
 }
 function label(s, width) {
