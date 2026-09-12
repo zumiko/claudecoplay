@@ -129,13 +129,19 @@
   <p class="caption" id="herocap"></p>
 
   <h2>install</h2>
-  <p>Three steps. The first is a one-off, and you may have it already.</p>
+
+  <p>Three steps. The first is a one-off, and you may have it already. If you'd rather not, <a href="#ask">ask Claude to do the whole thing</a>.</p>
 
   <p><b class="accent">1.</b> Install <b>tmux</b>. The games run in a tmux pane, so this is a hard requirement rather than a nicety.</p>
+  <p class="dim">macOS</p>
   <div class="cmd">
     <button type="button" data-copy>copy</button>
-    <pre>brew install tmux          <span class="p"># macOS</span>
-sudo apt install tmux      <span class="p"># Debian / Ubuntu</span></pre>
+    <pre>brew install tmux</pre>
+  </div>
+  <p class="dim">Debian / Ubuntu</p>
+  <div class="cmd">
+    <button type="button" data-copy>copy</button>
+    <pre>sudo apt install tmux</pre>
   </div>
 
   <p><b class="accent">2.</b> Install the plugin, from inside Claude Code:</p>
@@ -146,14 +152,35 @@ sudo apt install tmux      <span class="p"># Debian / Ubuntu</span></pre>
   </div>
   <p class="dim">Restart Claude Code so the hooks load.</p>
 
-  <p><b class="accent">3.</b> Get Claude running <b>inside tmux</b>. A session already running outside tmux can't be moved into one — but this reopens your <b>current conversation</b> in tmux, so you lose nothing:</p>
+  <p><b class="accent">3.</b> Start Claude <b>inside tmux</b>. In your terminal, that's just:</p>
+  <div class="cmd">
+    <button type="button" data-copy>copy</button>
+    <pre>tmux
+claude</pre>
+  </div>
+  <p>Then type <code>/snake</code>, <code>/tetris</code> or <code>/asteroids</code>.</p>
+
+  <p>Already deep in a conversation outside tmux? It can't be moved into one — but this reopens <b>that same conversation</b> in tmux, so you lose nothing:</p>
   <div class="cmd">
     <button type="button" data-copy>copy</button>
     <pre>tmux new -s coplay 'claude --continue'</pre>
   </div>
 
-  <p>Then type <code>/snake</code>, <code>/tetris</code> or <code>/asteroids</code>.</p>
-  <p class="dim">Steps 1 and 3 are also bundled: the repo's <code>bin/coplay</code> offers to install tmux for you, then starts Claude inside it. And <code>/coplay</code> reports exactly what is and isn't wired up, including the command above if you need it. Needs Node 16+ as well; no npm dependencies — the games use only <code>fs</code>, <code>os</code> and <code>path</code>. <b>Nothing is ever written to your <code>settings.json</code></b>: the hooks ship inside the plugin, so uninstalling removes them completely.</p>
+  <p class="dim">Needs Node 16+ too. No npm dependencies — the games use only <code>fs</code>, <code>os</code> and <code>path</code>. <b>Nothing is ever written to your <code>settings.json</code></b>: the hooks ship inside the plugin, so uninstalling removes them completely. Unsure what's wired up? <code>/coplay</code> tells you.</p>
+
+  <h2 id="ask">or just ask Claude</h2>
+  <p>Paste this into Claude Code and it'll do all three steps for you. It asks before running anything, so you can see each command first:</p>
+  <div class="cmd">
+    <button type="button" data-copy>copy</button>
+    <pre>Install coplay for me: https://github.com/<span data-repo>zumiko/claudecoplay</span>
+
+Check whether tmux is installed and install it if not, then run
+  claude plugin marketplace add <span data-repo>zumiko/claudecoplay</span>
+  claude plugin install coplay@coplay
+and then tell me exactly what to type to start playing, including how to
+start Claude inside tmux, since the games need a tmux pane.</pre>
+  </div>
+  <p class="dim">The bundled <code>bin/coplay</code> script does the same job from a terminal: it works out the right install command for your platform and offers to run it, then starts Claude inside tmux.</p>
 
   <h2>the games</h2>
   <div class="demos">

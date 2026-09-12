@@ -26,14 +26,22 @@ it back when Claude needs an answer.
 
 ## Install
 
-Three steps. The first is a one-off, and you may have it already.
+Three steps. The first is a one-off, and you may have it already. If you'd
+rather not, [ask Claude to do it all](#or-just-ask-claude).
 
 **1. Install tmux.** The games run in a tmux pane, so this is a hard
 requirement, not a nicety.
 
+macOS:
+
 ```sh
-brew install tmux          # macOS
-sudo apt install tmux      # Debian / Ubuntu
+brew install tmux
+```
+
+Debian / Ubuntu:
+
+```sh
+sudo apt install tmux
 ```
 
 **2. Install the plugin**, from inside Claude Code:
@@ -43,32 +51,50 @@ sudo apt install tmux      # Debian / Ubuntu
 /plugin install coplay@coplay
 ```
 
-Restart Claude Code so the hooks load, then check it:
+Restart Claude Code so the hooks load.
+
+**3. Start Claude inside tmux.** In your terminal, that's just:
 
 ```sh
-claude plugin list      # expect: coplay@coplay ... enabled
+tmux
+claude
 ```
 
-**3. Get Claude running inside tmux.** A session already running outside tmux
-can't be moved into one — but this reopens your *current conversation* in
-tmux, so you lose nothing:
+Then type `/snake`, `/tetris` or `/asteroids`.
+
+Already deep in a conversation outside tmux? It can't be moved into one — but
+this reopens *that same conversation* in tmux, so you lose nothing:
 
 ```sh
 tmux new -s coplay 'claude --continue'
 ```
 
-Then type `/snake`, `/tetris` or `/asteroids`.
+Unsure what's wired up? `/coplay` tells you, and prints the command above if
+you need it.
 
-Steps 1 and 3 are bundled too — `bin/coplay` offers to install tmux for you
-and then starts Claude inside it:
+## Or just ask Claude
+
+Paste this into Claude Code and it will do all three steps. It asks before
+running anything, so you see each command first:
+
+```
+Install coplay for me: https://github.com/zumiko/claudecoplay
+
+Check whether tmux is installed and install it if not, then run
+  claude plugin marketplace add zumiko/claudecoplay
+  claude plugin install coplay@coplay
+and then tell me exactly what to type to start playing, including how to
+start Claude inside tmux, since the games need a tmux pane.
+```
+
+From a terminal, `bin/coplay` does the same job — it works out the right
+install command for your platform, offers to run it, then starts Claude inside
+tmux:
 
 ```sh
 ./bin/coplay                # new session inside tmux
 ./bin/coplay --continue     # resume your last conversation instead
 ```
-
-Not sure how you're set up? `/coplay` reports what's wired up, and prints the
-command above if you aren't in tmux.
 
 ### Requirements
 
