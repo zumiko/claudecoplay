@@ -252,8 +252,16 @@ start Claude inside tmux, since the games need a tmux pane.</pre>
 });</pre></div>
   <p>Drop it in <code>games/</code>, add a matching command file, and <code>/coplay</code> picks it up automatically.</p>
 
+  <h2>contact</h2>
+  <p>A fun project by <b>Claire Jellison</b> and <b>Drew Devero</b>.</p>
+  <table>
+    <tr><td>Claire Jellison</td><td><a href="mailto:clairejellison@yahoo.com">clairejellison@yahoo.com</a></td></tr>
+    <tr><td>Drew Devero</td><td><a href="mailto:deverobelfon@gmail.com">deverobelfon@gmail.com</a></td></tr>
+  </table>
+  <p class="dim">Bugs and ideas are also welcome as <a data-repo-issues href="#">issues on GitHub</a>.</p>
+
   <footer>
-    <span>coplay</span> · <span>MIT</span> · <a data-repo-url href="#">source</a>
+    <span>coplay</span> · <span>MIT</span> · <a data-repo-url href="#">source</a> · built by Claire Jellison &amp; Drew Devero
   </footer>
 </main>
 
@@ -267,6 +275,8 @@ var REPO = 'zumiko/claudecoplay';
 for (var i = 0, el = document.querySelectorAll('[data-repo]'); i < el.length; i++) el[i].textContent = REPO;
 var links = document.querySelectorAll('[data-repo-url]');
 for (var j = 0; j < links.length; j++) links[j].href = 'https://github.com/' + REPO;
+var issues = document.querySelectorAll('[data-repo-issues]');
+for (var k = 0; k < issues.length; k++) issues[k].href = 'https://github.com/' + REPO + '/issues';
 
 // copy buttons
 document.querySelectorAll('[data-copy]').forEach(function (btn) {

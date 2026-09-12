@@ -251,3 +251,15 @@ from inside a session that is already running.
 
 This edition trades the wrapper for always-on plugin hooks, which is what makes
 an in-session `/snake` possible. The two can coexist.
+
+## Contact
+
+A fun project by **Claire Jellison** and **Drew Devero**.
+
+| | |
+| --- | --- |
+| Claire Jellison | clairejellison@yahoo.com |
+| Drew Devero | deverobelfon@gmail.com |
+
+Bugs and ideas are welcome as
+[issues](https://github.com/zumiko/claudecoplay/issues).
