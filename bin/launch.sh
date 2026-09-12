@@ -56,6 +56,25 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 if ! command -v tmux >/dev/null 2>&1; then
+  # Git Bash / MSYS / Cygwin: tmux genuinely does not exist there, so brew and
+  # apt advice would only waste the reader's time. Checked only when tmux is
+  # actually missing, since MSYS builds of it do exist. WSL reports itself as
+  # Linux, where the apt path below is already right.
+  case "$(uname -s 2>/dev/null)" in
+    MINGW* | MSYS* | CYGWIN*)
+      say "coplay needs tmux, which does not exist on native Windows.
+
+Run Claude Code inside WSL instead. In PowerShell, once:
+
+    wsl --install
+
+then, inside the Ubuntu shell:
+
+    sudo apt install tmux
+
+and start Claude there. Everything else works exactly the same."
+      ;;
+  esac
   say "coplay needs tmux to open a game pane, but tmux is not installed.
 
   macOS:          brew install tmux

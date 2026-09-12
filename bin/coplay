@@ -25,6 +25,18 @@ if ! command -v tmux >/dev/null 2>&1; then
   echo "coplay needs tmux to open a game pane, and it is not installed."
   echo ""
 
+  case "$(uname -s 2>/dev/null)" in
+    MINGW* | MSYS* | CYGWIN*)
+      echo "tmux does not exist on native Windows. Run Claude Code inside WSL:"
+      echo ""
+      echo "  wsl --install              (in PowerShell, once)"
+      echo "  sudo apt install tmux      (inside the Ubuntu shell)"
+      echo ""
+      echo "Then start Claude there and everything works the same."
+      exit 1
+      ;;
+  esac
+
   INSTALL=""
   if command -v brew >/dev/null 2>&1; then
     INSTALL="brew install tmux"

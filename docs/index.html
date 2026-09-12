@@ -130,7 +130,7 @@
 
   <h2>install</h2>
 
-  <p>Three steps. The first is a one-off, and you may have it already. If you'd rather not, <a href="#ask">ask Claude to do the whole thing</a>.</p>
+  <p>Three steps. The first is a one-off, and you may have it already. Or <a href="#ask">ask Claude to do it</a>.</p>
 
   <p><b class="accent">1.</b> Install <b>tmux</b>. The games run in a tmux pane, so this is a hard requirement rather than a nicety.</p>
   <p class="dim">macOS</p>
@@ -142,6 +142,11 @@
   <div class="cmd">
     <button type="button" data-copy>copy</button>
     <pre>sudo apt install tmux</pre>
+  </div>
+  <p class="dim">Windows &mdash; tmux doesn't exist on native Windows, so run Claude Code inside <b>WSL</b>. Once you're in an Ubuntu shell, the line above is the one you want.</p>
+  <div class="cmd">
+    <button type="button" data-copy>copy</button>
+    <pre>wsl --install</pre>
   </div>
 
   <p><b class="accent">2.</b> Install the plugin, from inside Claude Code:</p>
@@ -168,7 +173,7 @@ claude</pre>
 
   <p class="dim">Needs Node 16+ too. No npm dependencies — the games use only <code>fs</code>, <code>os</code> and <code>path</code>. <b>Nothing is ever written to your <code>settings.json</code></b>: the hooks ship inside the plugin, so uninstalling removes them completely. Unsure what's wired up? <code>/coplay</code> tells you.</p>
 
-  <h2 id="ask">or just ask Claude</h2>
+  <h2 id="ask">or ask Claude to do it</h2>
   <p>Paste this into Claude Code and it'll do all three steps for you. It asks before running anything, so you can see each command first:</p>
   <div class="cmd">
     <button type="button" data-copy>copy</button>

@@ -26,8 +26,8 @@ it back when Claude needs an answer.
 
 ## Install
 
-Three steps. The first is a one-off, and you may have it already. If you'd
-rather not, [ask Claude to do it all](#or-just-ask-claude).
+Three steps. The first is a one-off, and you may have it already. Or
+[ask Claude to do it](#or-ask-claude-to-do-it).
 
 **1. Install tmux.** The games run in a tmux pane, so this is a hard
 requirement, not a nicety.
@@ -43,6 +43,10 @@ Debian / Ubuntu:
 ```sh
 sudo apt install tmux
 ```
+
+Windows: tmux doesn't exist on native Windows, so run Claude Code inside
+**WSL** (`wsl --install` in PowerShell, once). Inside the Ubuntu shell, use
+the Debian / Ubuntu line above.
 
 **2. Install the plugin**, from inside Claude Code:
 
@@ -72,7 +76,7 @@ tmux new -s coplay 'claude --continue'
 Unsure what's wired up? `/coplay` tells you, and prints the command above if
 you need it.
 
-## Or just ask Claude
+## Or ask Claude to do it
 
 Paste this into Claude Code and it will do all three steps. It asks before
 running anything, so you see each command first:
