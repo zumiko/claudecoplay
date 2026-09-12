@@ -254,7 +254,7 @@ an in-session `/snake` possible. The two can coexist.
 
 ## Contact
 
-A fun project by **Claire Jellison** and **Drew Devero**.
+A little project by **Claire Jellison** and **Drew Devero**.
 
 | | |
 | --- | --- |
