@@ -16,11 +16,63 @@ set -u
 
 SESSION=coplay
 
+# tmux is a system package, so coplay cannot just bundle it. What it can do is
+# work out the right command and offer to run it. Strictly opt-in: it asks
+# first, it only asks when there is a terminal to answer on, and it never runs
+# a package manager from the /snake path -- only from this script, which you
+# ran deliberately.
 if ! command -v tmux >/dev/null 2>&1; then
-  echo "coplay needs tmux, which is not installed."
-  echo "  macOS:          brew install tmux"
-  echo "  Debian/Ubuntu:  sudo apt install tmux"
-  exit 1
+  echo "coplay needs tmux to open a game pane, and it is not installed."
+  echo ""
+
+  INSTALL=""
+  if command -v brew >/dev/null 2>&1; then
+    INSTALL="brew install tmux"
+  elif command -v apt-get >/dev/null 2>&1; then
+    INSTALL="sudo apt-get install -y tmux"
+  elif command -v dnf >/dev/null 2>&1; then
+    INSTALL="sudo dnf install -y tmux"
+  elif command -v pacman >/dev/null 2>&1; then
+    INSTALL="sudo pacman -S --noconfirm tmux"
+  elif command -v apk >/dev/null 2>&1; then
+    INSTALL="sudo apk add tmux"
+  fi
+
+  if [ -z "$INSTALL" ]; then
+    echo "No package manager I recognise. Install tmux however you normally"
+    echo "would, then run coplay again."
+    exit 1
+  fi
+
+  # No terminal to read an answer from (piped, CI, etc): print, do not run.
+  if [ ! -t 0 ]; then
+    echo "Install it with:  $INSTALL"
+    exit 1
+  fi
+
+  printf 'Run "%s" now? [y/N] ' "$INSTALL"
+  read -r reply
+  case "$reply" in
+    y | Y | yes | YES | Yes)
+      echo ""
+      if ! sh -c "$INSTALL"; then
+        echo ""
+        echo "That did not complete. Install tmux yourself and run coplay again."
+        exit 1
+      fi
+      ;;
+    *)
+      echo "Left alone. Install tmux with:  $INSTALL"
+      exit 1
+      ;;
+  esac
+
+  if ! command -v tmux >/dev/null 2>&1; then
+    echo "tmux still is not on PATH. Open a new shell and try coplay again."
+    exit 1
+  fi
+  echo ""
+  echo "tmux is ready."
 fi
 if ! command -v claude >/dev/null 2>&1; then
   echo "coplay could not find 'claude' on your PATH."

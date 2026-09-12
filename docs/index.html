@@ -129,22 +129,31 @@
   <p class="caption" id="herocap"></p>
 
   <h2>install</h2>
-  <p>Inside Claude Code:</p>
+  <p>Three steps. The first is a one-off, and you may have it already.</p>
+
+  <p><b class="accent">1.</b> Install <b>tmux</b>. The games run in a tmux pane, so this is a hard requirement rather than a nicety.</p>
+  <div class="cmd">
+    <button type="button" data-copy>copy</button>
+    <pre>brew install tmux          <span class="p"># macOS</span>
+sudo apt install tmux      <span class="p"># Debian / Ubuntu</span></pre>
+  </div>
+
+  <p><b class="accent">2.</b> Install the plugin, from inside Claude Code:</p>
   <div class="cmd">
     <button type="button" data-copy>copy</button>
     <pre><span class="p">/</span>plugin marketplace add <span data-repo>USER/REPO</span>
 <span class="p">/</span>plugin install coplay@coplay</pre>
   </div>
-  <p>Restart Claude Code so the hooks load.</p>
+  <p class="dim">Restart Claude Code so the hooks load.</p>
 
-  <h2>not in tmux?</h2>
-  <p>The games need a tmux pane to split into, and a session already running outside tmux can't be moved into one. This single command reopens your <b>current conversation</b> inside tmux, so you lose nothing:</p>
+  <p><b class="accent">3.</b> Get Claude running <b>inside tmux</b>. A session already running outside tmux can't be moved into one — but this reopens your <b>current conversation</b> in tmux, so you lose nothing:</p>
   <div class="cmd">
     <button type="button" data-copy>copy</button>
     <pre>tmux new -s coplay 'claude --continue'</pre>
   </div>
-  <p>Then type <code>/snake</code>. If you're not sure how you're set up, <code>/coplay</code> tells you — and prints that command if you need it.</p>
-  <p class="dim">Needs tmux (<code>brew install tmux</code>) and Node 16+. No npm dependencies — the games use only <code>fs</code>, <code>os</code> and <code>path</code>. <b>Nothing is ever written to your <code>settings.json</code></b>: the hooks ship inside the plugin, so uninstalling removes them completely.</p>
+
+  <p>Then type <code>/snake</code>, <code>/tetris</code> or <code>/asteroids</code>.</p>
+  <p class="dim">Steps 1 and 3 are also bundled: the repo's <code>bin/coplay</code> offers to install tmux for you, then starts Claude inside it. And <code>/coplay</code> reports exactly what is and isn't wired up, including the command above if you need it. Needs Node 16+ as well; no npm dependencies — the games use only <code>fs</code>, <code>os</code> and <code>path</code>. <b>Nothing is ever written to your <code>settings.json</code></b>: the hooks ship inside the plugin, so uninstalling removes them completely.</p>
 
   <h2>the games</h2>
   <div class="demos">

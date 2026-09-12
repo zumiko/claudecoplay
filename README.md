@@ -26,7 +26,17 @@ it back when Claude needs an answer.
 
 ## Install
 
-Inside Claude Code:
+Three steps. The first is a one-off, and you may have it already.
+
+**1. Install tmux.** The games run in a tmux pane, so this is a hard
+requirement, not a nicety.
+
+```sh
+brew install tmux          # macOS
+sudo apt install tmux      # Debian / Ubuntu
+```
+
+**2. Install the plugin**, from inside Claude Code:
 
 ```
 /plugin marketplace add zumiko/claudecoplay
@@ -39,12 +49,9 @@ Restart Claude Code so the hooks load, then check it:
 claude plugin list      # expect: coplay@coplay ... enabled
 ```
 
-## Run it
-
-The games need a tmux pane to split into, so **Claude has to be running inside
-tmux**. A session that is already running outside tmux can't be moved into one —
-but this single command reopens your current conversation inside tmux, so you
-lose nothing:
+**3. Get Claude running inside tmux.** A session already running outside tmux
+can't be moved into one — but this reopens your *current conversation* in
+tmux, so you lose nothing:
 
 ```sh
 tmux new -s coplay 'claude --continue'
@@ -52,16 +59,16 @@ tmux new -s coplay 'claude --continue'
 
 Then type `/snake`, `/tetris` or `/asteroids`.
 
-Starting from scratch, `bin/coplay` does the same thing for a fresh session
-(handy on your PATH as `coplay`):
+Steps 1 and 3 are bundled too — `bin/coplay` offers to install tmux for you
+and then starts Claude inside it:
 
 ```sh
 ./bin/coplay                # new session inside tmux
 ./bin/coplay --continue     # resume your last conversation instead
 ```
 
-Not sure whether you're set up? `/coplay` reports what's wired up, and prints
-the command above if you aren't in tmux.
+Not sure how you're set up? `/coplay` reports what's wired up, and prints the
+command above if you aren't in tmux.
 
 ### Requirements
 
