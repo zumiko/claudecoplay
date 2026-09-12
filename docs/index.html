@@ -291,6 +291,10 @@ function Snake(w, h) {
   this.dir = { x: 1, y: 0 };
   this.score = 0;
   this.food = null;
+  // Cap the length relative to the board. Left to grow forever it fills a
+  // small pane, walls itself in and has to restart every few seconds, which
+  // reads as the animation breaking.
+  this.maxLen = Math.max(10, Math.min(90, Math.floor(w * h * 0.12)));
   this.place();
 }
 Snake.prototype.place = function () {
@@ -304,9 +308,50 @@ Snake.prototype.place = function () {
     }
   }
 };
+// How many of the four neighbours of a cell are free. Used to steer away
+// from dead ends: a purely greedy chase walks into one and then has nowhere
+// left to go.
+Snake.prototype.room = function (x, y) {
+  var d = [[1, 0], [-1, 0], [0, 1], [0, -1]], n = 0;
+  for (var i = 0; i < 4; i++) {
+    var nx = x + d[i][0], ny = y + d[i][1];
+    if (nx < 0 || ny < 0 || nx >= this.w || ny >= this.h) continue;
+    if (this.hits(nx, ny, 1)) continue;
+    n++;
+  }
+  return n;
+};
+// Count the free squares reachable from a point, stopping once `cap` have
+// been found -- the answer only matters up to the snake's own length, and
+// bounding it keeps this cheap enough to run every step.
+Snake.prototype.reach = function (x, y, cap, occupied) {
+  var stack = [x + y * this.w], seen = new Set(), n = 0;
+  while (stack.length && n < cap) {
+    var k = stack.pop();
+    if (seen.has(k) || occupied.has(k)) continue;
+    var px = k % this.w, py = (k - px) / this.w;
+    seen.add(k); n++;
+    if (px + 1 < this.w) stack.push(k + 1);
+    if (px - 1 >= 0) stack.push(k - 1);
+    if (py + 1 < this.h) stack.push(k + this.w);
+    if (py - 1 >= 0) stack.push(k - this.w);
+  }
+  return n;
+};
+// Even with that, a long enough snake can still wall itself in. Start over
+// somewhere else at a similar length rather than sitting frozen forever.
+Snake.prototype.respawn = function () {
+  var len = Math.max(8, Math.min(this.body.length, this.maxLen));
+  this.body = [{ x: rint(this.w), y: rint(this.h) }];
+  this.dir = { x: 1, y: 0 };
+  this.growing = len;
+  this.place();
+};
 // Add n segments over the next n steps, following wherever the autopilot
 // goes -- which produces a naturally winding body rather than a straight line.
-Snake.prototype.grow = function (n) { this.growing = (this.growing || 0) + n; };
+Snake.prototype.grow = function (n) {
+  this.growing = Math.min((this.growing || 0) + n, this.maxLen);
+};
 Snake.prototype.hits = function (x, y, skip) {
   for (var i = 0; i < this.body.length - (skip || 0); i++) {
     if (this.body[i].x === x && this.body[i].y === y) return true;
@@ -317,6 +362,18 @@ Snake.prototype.step = function () {
   var head = this.body[0], f = this.food || head;
   var opts = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
   var self = this, best = null, bestScore = 1e9;
+  // On a small board -- the visible demo panes and the hero -- run the full
+  // flood-fill safety check. On the huge background grid the cheap
+  // free-neighbour heuristic is enough, and a fill per move per snake every
+  // frame would not be.
+  var careful = this.w * this.h <= 1500;
+  var occupied = null;
+  if (careful) {
+    occupied = new Set();
+    for (var bi = 0; bi < this.body.length - 1; bi++) {
+      occupied.add(this.body[bi].x + this.body[bi].y * this.w);
+    }
+  }
   opts.forEach(function (d) {
     if (d.x === -self.dir.x && d.y === -self.dir.y) return;   // no reversing
     var nx = head.x + d.x, ny = head.y + d.y;
@@ -325,16 +382,26 @@ Snake.prototype.step = function () {
     // Manhattan distance to the food, plus a nudge to keep it from hugging walls.
     var s = Math.abs(nx - f.x) + Math.abs(ny - f.y);
     if (nx === 0 || ny === 0 || nx === self.w - 1 || ny === self.h - 1) s += 0.5;
+    // Strongly avoid squares with no way out, and mildly prefer open ones.
+    var room = self.room(nx, ny);
+    if (room === 0) s += 8; else s -= room * 0.4;
+    // Refuse to shut itself into a space it cannot fit through.
+    if (careful) {
+      var need = self.body.length + 2;
+      if (self.reach(nx, ny, need, occupied) < need) s += 500;
+    }
     if (s < bestScore) { bestScore = s; best = d; }
   });
-  if (!best) return;                                          // boxed in: sit still
+  if (!best) { this.respawn(); return; }                      // walled in: start over
   this.dir = best;
   var nh = { x: head.x + best.x, y: head.y + best.y };
   this.body.unshift(nh);
   if (this.food && nh.x === this.food.x && nh.y === this.food.y) {
     this.score++;
     this.place();
-  } else if (this.growing > 0) {
+    // At the cap, keep eating but stop growing.
+    if (this.body.length > this.maxLen) this.body.pop();
+  } else if (this.growing > 0 && this.body.length <= this.maxLen) {
     this.growing--;
   } else {
     this.body.pop();
@@ -681,18 +748,18 @@ function heroFrame() {
 
   var title = hero.kind.toUpperCase();
   var right = [];
-  right.push(pad(' ' + title + (working ? '' : ' [PAUSED]') + '  ' + hero.sim.score, gw + 2));
+  right.push(pad(' score ' + hero.sim.score, gw + 2));
   right.push('+' + '-'.repeat(gw) + '+');
   var grows = text(gg).split('\n');
   for (var r = 0; r < gh; r++) right.push('|' + pad(grows[r] || '', gw).slice(0, gw) + '|');
   right.push('+' + '-'.repeat(gw) + '+');
-  right.push(working ? ' arrows to play' : ' [PAUSED] Claude needs you');
+  right.push(working ? ' arrows to play' : ' Claude needs you');
 
   // ---- stitch ------------------------------------------------------------
   var out = [];
   if (L.mode === 'side') {
     while (right.length < body) right.push('');
-    out.push('+' + label(' CLAUDE ', L.lw) + '+' + label(' ' + title + ' ', L.rw) + '+');
+    out.push('+' + label(' CLAUDE ', L.lw) + '+' + label(paneLabel(title, working), L.rw) + '+');
     for (var b = 0; b < body; b++) {
       out.push('|' + pad(' ' + left[b], L.lw) + '|' + pad(right[b], L.rw) + '|');
     }
@@ -702,7 +769,7 @@ function heroFrame() {
     for (var b2 = 0; b2 < body; b2++) out.push('|' + pad(' ' + left[b2], L.lw) + '|');
     out.push('+' + '-'.repeat(L.lw) + '+');
     out.push('');
-    out.push('+' + label(' ' + title + ' ', L.rw) + '+');
+    out.push('+' + label(paneLabel(title, working), L.rw) + '+');
     for (var b3 = 0; b3 < right.length; b3++) out.push('|' + pad(right[b3], L.rw) + '|');
     out.push('+' + '-'.repeat(L.rw) + '+');
   }
@@ -721,6 +788,9 @@ function heroFrame() {
   else if (!working && hero.t > 56) {
     hero.phase = 'work'; hero.t = 0; hero.cycle++; heroNewGame(heroLayout());
   }
+}
+function paneLabel(title, working) {
+  return ' ' + title + (working ? '' : ' [PAUSED]') + ' ';
 }
 function label(s, width) {
   return (s + '-'.repeat(Math.max(0, width - s.length))).slice(0, width);
