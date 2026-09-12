@@ -1,0 +1,93 @@
+{
+  "_comment": [
+    "coplay attention hooks. These are the entire communication channel",
+    "between Claude Code and the game pane: they write one word, WORKING or",
+    "PAUSED, into a per-session state file that the game polls every tick.",
+    "",
+    "Schema note (verified against claude v2.1.269): hook events MUST be nested",
+    "under a top-level 'hooks' key. The flat format -- event names as top-level",
+    "keys -- is rejected with a Settings Error. Do not 'simplify' this.",
+    "",
+    "$CLAUDE_CODE_SESSION_ID is exported into the hook environment by Claude",
+    "Code and matches the session_id in the hook's stdin JSON, so keying the",
+    "state file by it isolates concurrent Claude sessions from each other",
+    "without any JSON parsing.",
+    "",
+    "SessionEnd deletes the file on purpose: that is how the game pane learns",
+    "the session is over and closes itself instead of lingering."
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$HOME/.claude-coplay/sessions\"; mkdir -p \"$d\" && echo WORKING > \"$d/${CLAUDE_CODE_SESSION_ID:-unknown}.state\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$HOME/.claude-coplay/sessions\"; mkdir -p \"$d\" && echo WORKING > \"$d/${CLAUDE_CODE_SESSION_ID:-unknown}.state\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$HOME/.claude-coplay/sessions\"; mkdir -p \"$d\" && echo WORKING > \"$d/${CLAUDE_CODE_SESSION_ID:-unknown}.state\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$HOME/.claude-coplay/sessions\"; mkdir -p \"$d\" && echo WORKING > \"$d/${CLAUDE_CODE_SESSION_ID:-unknown}.state\""
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$HOME/.claude-coplay/sessions\"; mkdir -p \"$d\" && echo PAUSED > \"$d/${CLAUDE_CODE_SESSION_ID:-unknown}.state\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$HOME/.claude-coplay/sessions\"; mkdir -p \"$d\" && echo PAUSED > \"$d/${CLAUDE_CODE_SESSION_ID:-unknown}.state\""
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rm -f \"$HOME/.claude-coplay/sessions/${CLAUDE_CODE_SESSION_ID:-unknown}.state\" \"$HOME/.claude-coplay/sessions/${CLAUDE_CODE_SESSION_ID:-unknown}.\"*.pane"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>coplay — play while Claude works</title>
+<meta name="description" content="A Claude Code plugin: play Snake, Tetris or Asteroids in a tmux pane while Claude works. The game freezes the instant Claude needs your attention.">
+<style>
+  :root{
+    --bg:#0b0d0e;
+    --fg:#c7d0d2;
+    --dim:#5c666a;
+    --faint:#2f3a3e;
+    --block:#4d5f66;
+    --accent:#5ecfa6;
+    --warn:#e0a458;
+    --line:#1d2426;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--fg);
+    font:13.5px/1.6 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+
+  /* Ambient ASCII layer. Sits behind everything and shows through the margins
+     either side of the content column. Deliberately very low contrast so it
+     never competes with the text. */
+  #ambient,#blocks{
+    position:fixed;inset:0;margin:0;z-index:0;
+    white-space:pre;overflow:hidden;
+    pointer-events:none;user-select:none;
+    font:13px/1.15 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  /* Two layers purely so the blocks and snakes can sit brighter than the
+     drifting rocks. Same font metrics, so the grids line up exactly. */
+  #ambient{color:var(--faint)}
+  #blocks{color:var(--block)}
+  main{
+    position:relative;z-index:1;max-width:84ch;margin:0 auto;
+    padding:2.6rem 2rem 4rem;background:var(--bg);
+    border-left:1px solid var(--line);border-right:1px solid var(--line);
+    min-height:100vh;
+  }
+  @media (max-width:1180px){ #ambient,#blocks{display:none} main{border:0} }
+
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--faint)}
+  a:hover{border-bottom-color:var(--accent)}
+  h1{font-size:1.3rem;font-weight:600;margin:0;letter-spacing:.02em}
+  h2{font-size:.95rem;font-weight:600;margin:2.8rem 0 .9rem;color:var(--fg)}
+  h2::before{content:"## ";color:var(--dim)}
+  p{margin:.7rem 0;max-width:72ch}
+  ul{margin:.7rem 0;padding-left:1.2rem;max-width:72ch}
+  li{margin:.35rem 0}
+  li::marker{color:var(--dim)}
+  .dim{color:var(--dim)}
+  .accent{color:var(--accent)}
+  .warn{color:var(--warn)}
+  hr{border:0;border-top:1px solid var(--line);margin:1.2rem 0}
+
+  header{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap}
+  .tagline{margin:.9rem 0 1.6rem;color:var(--fg)}
+  .tagline b{color:var(--accent);font-weight:600}
+
+  pre{margin:0;white-space:pre;overflow-x:auto}
+  pre.pane{color:var(--fg);line-height:1.15;font-size:13px}
+  .caption{color:var(--dim);margin:.6rem 0 0;font-size:12.5px}
+  .caption b{color:var(--accent);font-weight:400}
+  .caption b.p{color:var(--warn)}
+
+  .demos{display:flex;gap:1.6rem;flex-wrap:wrap;margin-top:.4rem}
+  .demo{flex:0 0 auto}
+  .demo .label{color:var(--dim);margin-bottom:.3rem}
+  .demo .label b{color:var(--fg);font-weight:600}
+
+  .cmd{
+    border:1px solid var(--line);padding:.85rem 1rem;margin:.8rem 0;
+    position:relative;background:#0e1112;
+  }
+  .cmd pre{color:var(--fg)}
+  .cmd .p{color:var(--dim)}
+  .cmd button{
+    position:absolute;top:.5rem;right:.5rem;
+    background:none;border:1px solid var(--line);color:var(--dim);
+    font:inherit;font-size:11.5px;padding:.1rem .45rem;cursor:pointer;
+  }
+  .cmd button:hover{color:var(--accent);border-color:var(--accent)}
+
+  table{border-collapse:collapse;margin:.8rem 0;font-size:13px}
+  th,td{text-align:left;padding:.28rem 1.4rem .28rem 0;vertical-align:top}
+  th{color:var(--dim);font-weight:400;border-bottom:1px solid var(--line)}
+  td code{color:var(--fg)}
+  code{color:var(--accent)}
+  footer{margin-top:3.2rem;padding-top:1.2rem;border-top:1px solid var(--line);color:var(--dim)}
+</style>
+</head>
+<body>
+<pre id="ambient" aria-hidden="true"></pre>
+<pre id="blocks" aria-hidden="true"></pre>
+
+<main>
+  <header>
+    <h1>coplay</h1>
+    <span class="dim">MIT · <a data-repo-url href="#">github</a></span>
+  </header>
+
+  <p class="tagline">Play while Claude works. The game <b>freezes the instant Claude needs you</b>, and resumes when it gets back to work.</p>
+
+  <pre class="pane" id="hero" aria-label="Animated demonstration of Claude working beside a game"></pre>
+  <p class="caption" id="herocap"></p>
+
+  <h2>install</h2>
+  <p>Inside Claude Code:</p>
+  <div class="cmd">
+    <button type="button" data-copy>copy</button>
+    <pre><span class="p">/</span>plugin marketplace add <span data-repo>USER/REPO</span>
+<span class="p">/</span>plugin install coplay@coplay</pre>
+  </div>
+  <p>Restart Claude Code so the hooks load.</p>
+
+  <h2>not in tmux?</h2>
+  <p>The games need a tmux pane to split into, and a session already running outside tmux can't be moved into one. This single command reopens your <b>current conversation</b> inside tmux, so you lose nothing:</p>
+  <div class="cmd">
+    <button type="button" data-copy>copy</button>
+    <pre>tmux new -s coplay 'claude --continue'</pre>
+  </div>
+  <p>Then type <code>/snake</code>. If you're not sure how you're set up, <code>/coplay</code> tells you — and prints that command if you need it.</p>
+  <p class="dim">Needs tmux (<code>brew install tmux</code>) and Node 16+. No npm dependencies — the games use only <code>fs</code>, <code>os</code> and <code>path</code>. <b>Nothing is ever written to your <code>settings.json</code></b>: the hooks ship inside the plugin, so uninstalling removes them completely.</p>
+
+  <h2>the games</h2>
+  <div class="demos">
+    <div class="demo"><p class="label"><b>/snake</b> — arrows to steer</p><pre class="pane" id="d-snake"></pre></div>
+    <div class="demo"><p class="label"><b>/tetris</b> — arrows, space drops</p><pre class="pane" id="d-tetris"></pre></div>
+    <div class="demo"><p class="label"><b>/asteroids</b> — turn, thrust, fire</p><pre class="pane" id="d-asteroids"></pre></div>
+  </div>
+  <p><code>/coplay</code> shows status, which game is running, and your local high scores.</p>
+
+  <h2>how it works</h2>
+  <p>The whole thing is one word in a file. Claude Code <b>hooks</b> write it; the game polls it every tick.</p>
+  <table>
+    <tr><th>hook event</th><th>writes</th></tr>
+    <tr><td><code>SessionStart</code></td><td>WORKING</td></tr>
+    <tr><td><code>UserPromptSubmit</code></td><td>WORKING</td></tr>
+    <tr><td><code>PreToolUse</code></td><td>WORKING</td></tr>
+    <tr><td><code>PostToolUse</code></td><td>WORKING</td></tr>
+    <tr><td><code>Notification</code></td><td class="warn">PAUSED</td></tr>
+    <tr><td><code>Stop</code></td><td class="warn">PAUSED</td></tr>
+    <tr><td><code>SessionEnd</code></td><td class="dim">deletes the file</td></tr>
+  </table>
+  <p>Each hook is a plain <code>echo</code>, so nothing starts an interpreter and the cost is a couple of bytes per event.</p>
+  <ul>
+    <li><b>Focus follows the work.</b> Submit a prompt and the keyboard moves to the game; the moment Claude needs you it moves back. Press <code>f</code> to turn that off.</li>
+    <li><b>Death is free.</b> Press <code>r</code>, or just send Claude a new prompt — the game restarts on the same edge that resumes it.</li>
+    <li><b>The pane cleans itself up.</b> <code>SessionEnd</code> deletes the state file, the game notices and closes, so panes never linger.</li>
+    <li><b>Concurrent sessions don't collide.</b> The state file is keyed by <code>$CLAUDE_CODE_SESSION_ID</code>, so two Claudes never stomp on each other.</li>
+  </ul>
+
+  <h2>notes</h2>
+  <ul>
+    <li>Claude has to already be running <b>inside tmux</b> — the game needs a pane to split into.</li>
+    <li><b>One game at a time.</b> Starting a different one closes the old pane, so there's never a question about which game has the keyboard.</li>
+    <li>Resizing never disturbs a run. If the pane gets too small the game waits behind a notice instead of drawing a broken frame.</li>
+    <li>High scores live in <code>~/.claude-coplay/scores.json</code>.</li>
+    <li>Uninstall: <code>/plugin uninstall coplay</code>. It leaves nothing behind but that scores file.</li>
+  </ul>
+
+  <h2>add your own game</h2>
+  <p>The engine owns the terminal, the pane sizing, the pause/resume and the chrome. A game is one file:</p>
+  <div class="cmd"><pre>engine.run({
+  id: 'pong', title: 'PONG', tickMs: 60,
+  controls: 'arrows to move',
+  minCols: 20, minRows: 10,
+  dims: (w, h) => ({ w, h }),
+  create: (w, h) =&gt; ({ score, dead, step(), key(k), rows() }),
+});</pre></div>
+  <p>Drop it in <code>games/</code>, add a matching command file, and <code>/coplay</code> picks it up automatically.</p>
+
+  <footer>
+    <span>coplay</span> · <span>MIT</span> · <a data-repo-url href="#">source</a>
+  </footer>
+</main>
+
+<script>
+'use strict';
+// ---------------------------------------------------------------------------
+// Repo slug: change this one line and every command + link on the page follows.
+// ---------------------------------------------------------------------------
+var REPO = 'zumiko/claudecoplay';
+
+for (var i = 0, el = document.querySelectorAll('[data-repo]'); i < el.length; i++) el[i].textContent = REPO;
+var links = document.querySelectorAll('[data-repo-url]');
+for (var j = 0; j < links.length; j++) links[j].href = 'https://github.com/' + REPO;
+
+// copy buttons
+document.querySelectorAll('[data-copy]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var text = btn.parentNode.querySelector('pre').innerText;
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = 'copied';
+      setTimeout(function () { btn.textContent = 'copy'; }, 1400);
+    }, function () { btn.textContent = 'copy failed'; });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tiny character-grid helpers. Everything on this page is drawn by writing
+// characters into a 2D array and joining it, exactly like the real games.
+// ---------------------------------------------------------------------------
+function grid(w, h, fill) {
+  // Note the explicit undefined check: Tetris fills its well with 0, and
+  // `fill || ' '` would replace that with a space -- which is truthy, so the
+  // empty well would read as completely full.
+  var v = fill === undefined ? ' ' : fill;
+  var g = [];
+  for (var y = 0; y < h; y++) { g.push(new Array(w).fill(v)); }
+  return g;
+}
+function put(g, x, y, ch) {
+  var X = Math.round(x), Y = Math.round(y);
+  if (Y >= 0 && Y < g.length && X >= 0 && X < g[0].length) g[Y][X] = ch;
+}
+function text(g) {
+  var out = [];
+  for (var y = 0; y < g.length; y++) out.push(g[y].join(''));
+  return out.join('\n');
+}
+function pad(s, n) { return s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length); }
+function rint(n) { return Math.floor(Math.random() * n); }
+
+// ---------------------------------------------------------------------------
+// SNAKE. Greedy autopilot: step toward the food unless that would kill it.
+// ---------------------------------------------------------------------------
+function Snake(w, h) {
+  this.w = w; this.h = h;
+  this.body = [{ x: (w / 2) | 0, y: (h / 2) | 0 }];
+  this.dir = { x: 1, y: 0 };
+  this.score = 0;
+  this.food = null;
+  this.place();
+}
+Snake.prototype.place = function () {
+  // Two passes: first honour foodOk (used to keep the ambient snake out from
+  // behind the content column), then settle for anywhere free.
+  for (var pass = 0; pass < 2; pass++) {
+    for (var t = 0; t < 300; t++) {
+      var f = { x: rint(this.w), y: rint(this.h) };
+      if (pass === 0 && this.foodOk && !this.foodOk(f.x, f.y)) continue;
+      if (!this.hits(f.x, f.y, 0)) { this.food = f; return; }
+    }
+  }
+};
+// Add n segments over the next n steps, following wherever the autopilot
+// goes -- which produces a naturally winding body rather than a straight line.
+Snake.prototype.grow = function (n) { this.growing = (this.growing || 0) + n; };
+Snake.prototype.hits = function (x, y, skip) {
+  for (var i = 0; i < this.body.length - (skip || 0); i++) {
+    if (this.body[i].x === x && this.body[i].y === y) return true;
+  }
+  return false;
+};
+Snake.prototype.step = function () {
+  var head = this.body[0], f = this.food || head;
+  var opts = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+  var self = this, best = null, bestScore = 1e9;
+  opts.forEach(function (d) {
+    if (d.x === -self.dir.x && d.y === -self.dir.y) return;   // no reversing
+    var nx = head.x + d.x, ny = head.y + d.y;
+    if (nx < 0 || ny < 0 || nx >= self.w || ny >= self.h) return;
+    if (self.hits(nx, ny, 1)) return;
+    // Manhattan distance to the food, plus a nudge to keep it from hugging walls.
+    var s = Math.abs(nx - f.x) + Math.abs(ny - f.y);
+    if (nx === 0 || ny === 0 || nx === self.w - 1 || ny === self.h - 1) s += 0.5;
+    if (s < bestScore) { bestScore = s; best = d; }
+  });
+  if (!best) return;                                          // boxed in: sit still
+  this.dir = best;
+  var nh = { x: head.x + best.x, y: head.y + best.y };
+  this.body.unshift(nh);
+  if (this.food && nh.x === this.food.x && nh.y === this.food.y) {
+    this.score++;
+    this.place();
+  } else if (this.growing > 0) {
+    this.growing--;
+  } else {
+    this.body.pop();
+  }
+};
+Snake.prototype.draw = function (g) {
+  if (this.food) put(g, this.food.x, this.food.y, '*');
+  var head = this.dir.x === 1 ? '>' : this.dir.x === -1 ? '<' : this.dir.y === -1 ? '^' : 'v';
+  for (var i = 0; i < this.body.length; i++) {
+    put(g, this.body[i].x, this.body[i].y, i === 0 ? head : '=');
+  }
+};
+
+// ---------------------------------------------------------------------------
+// TETRIS. Drops pieces toward a target column and clears lines. When the stack
+// gets too tall it wipes the well rather than topping out, so it loops forever.
+// ---------------------------------------------------------------------------
+// I, O, T, J, L -- every one flat along the bottom. S and Z are left out on
+// purpose: these pieces never rotate, and an S or Z dropped as-is always
+// leaves an unreachable hole, so rows would almost never complete and the well
+// would just top out and wipe. Five shapes is plenty of variety for scenery.
+var SHAPES = [
+  [[0, 1], [1, 1], [2, 1], [3, 1]],
+  [[0, 0], [1, 0], [0, 1], [1, 1]],
+  [[1, 0], [0, 1], [1, 1], [2, 1]],
+  [[0, 0], [0, 1], [1, 1], [2, 1]],
+  [[2, 0], [0, 1], [1, 1], [2, 1]]
+];
+function Tetris(cols, rows, maxActive, smart) {
+  this.cols = cols; this.rows = rows;
+  this.maxActive = maxActive || 1;
+  // smart = aim for level ground so rows complete (good for a small well you
+  // are actually looking at). Otherwise scatter across the full width, which
+  // is what the background wants.
+  this.smart = !!smart;
+  // The pile height that triggers a full clear. A small well tops out
+  // literally at the ceiling; the background spreads over ~100 columns, where
+  // waiting for a pile to reach row 0 would take the better part of an hour,
+  // so it clears once any column gets convincingly tall.
+  this.clearHeight = this.smart ? rows : Math.max(8, Math.round(rows * 0.2));
+  this.well = grid(cols, rows, 0);
+  this.score = 0; this.lines = 0;
+  this.tick = 0;
+  this.active = [];
+  this.refill();
+}
+// Height of the stack in each column, measured from the floor up.
+Tetris.prototype.heights = function () {
+  var hs = [];
+  for (var x = 0; x < this.cols; x++) {
+    var y = 0;
+    while (y < this.rows && !this.well[y][x]) y++;
+    hs.push(this.rows - y);
+  }
+  return hs;
+};
+Tetris.prototype.newPiece = function () {
+  var cells = SHAPES[rint(SHAPES.length)].map(function (c) { return [c[0], c[1]]; });
+  var wide = Math.max.apply(null, cells.map(function (c) { return c[0]; })) + 1;
+  var spots = Math.max(1, this.cols - wide + 1);
+  var target = rint(spots);
+  if (this.smart) {
+    // Flatness first, then lowness. Every shape here has a flat bottom, so a
+    // level landing zone means no buried holes -- and only a well without
+    // holes actually completes rows instead of slowly choking.
+    var hs = this.heights(), bestScore = Infinity;
+    for (var x = 0; x < spots; x++) {
+      var mx = 0, mn = Infinity;
+      for (var k = 0; k < wide; k++) {
+        mx = Math.max(mx, hs[x + k]);
+        mn = Math.min(mn, hs[x + k]);
+      }
+      var score = (mx - mn) * 10 + mx;
+      if (score < bestScore) { bestScore = score; target = x; }
+    }
+  }
+  // Each piece gets its own phase and fall speed, otherwise a screen full of
+  // them descends in lockstep and looks mechanical.
+  return {
+    cells: cells, wide: wide,
+    // A smart well starts the piece directly over its target: in a short
+    // well a piece sliding in from a random column often lands before it
+    // arrives, which is what was wrecking the stack and stalling clears.
+    px: this.smart ? target : rint(spots), py: -1, target: target,
+    phase: rint(6), speed: 3 + rint(3)
+  };
+};
+Tetris.prototype.refill = function () {
+  while (this.active.length < this.maxActive) this.active.push(this.newPiece());
+};
+Tetris.prototype.blocked = function (p, px, py) {
+  for (var i = 0; i < p.cells.length; i++) {
+    var x = px + p.cells[i][0], y = py + p.cells[i][1];
+    if (x < 0 || x >= this.cols || y >= this.rows) return true;
+    if (y >= 0 && this.well[y][x]) return true;
+  }
+  return false;
+};
+Tetris.prototype.step = function () {
+  this.tick++;
+  for (var i = this.active.length - 1; i >= 0; i--) {
+    var p = this.active[i], t = this.tick + p.phase;
+    if (t % 2 === 0 && p.px !== p.target) {
+      var d = p.px < p.target ? 1 : -1;
+      if (!this.blocked(p, p.px + d, p.py)) p.px += d;
+    }
+    if (t % p.speed) continue;
+    if (!this.blocked(p, p.px, p.py + 1)) { p.py++; continue; }
+    // lock() may wipe the whole field, which throws away the very array we
+    // are walking -- so stop iterating rather than indexing into nothing.
+    if (this.lock(p)) break;
+    this.active.splice(i, 1);
+  }
+  this.refill();
+};
+Tetris.prototype.lock = function (p) {
+  var i, x, y;
+  for (i = 0; i < p.cells.length; i++) {
+    x = p.px + p.cells[i][0]; y = p.py + p.cells[i][1];
+    if (y >= 0 && y < this.rows) this.well[y][x] = 1;
+  }
+  var cleared = 0;
+  for (var y2 = this.rows - 1; y2 >= 0; y2--) {
+    var full = this.well[y2].every(function (v) { return v; });
+    if (full) {
+      this.well.splice(y2, 1);
+      this.well.unshift(new Array(this.cols).fill(0));
+      cleared++; y2++;
+    }
+  }
+  if (cleared) { this.lines += cleared; this.score += [0, 100, 300, 500, 800][cleared]; }
+  // As soon as ANY single column piles up to the ceiling, the whole field
+  // clears out and starts over. Across a full-width background that reset is
+  // the show.
+  var hs = this.heights(), tallest = 0;
+  for (var c = 0; c < hs.length; c++) if (hs[c] > tallest) tallest = hs[c];
+  if (tallest >= this.clearHeight) {
+    this.well = grid(this.cols, this.rows, 0);
+    this.active = [];
+    return true;
+  }
+  return false;
+};
+Tetris.prototype.draw = function (g, x0, y0, cellw) {
+  var cw = cellw || 2;
+  var glyph = cw === 2 ? '[]' : '#';
+  var x, y, k;
+  for (y = 0; y < this.rows; y++) {
+    for (x = 0; x < this.cols; x++) {
+      if (this.well[y][x]) {
+        for (k = 0; k < cw; k++) put(g, x0 + x * cw + k, y0 + y, glyph[k % glyph.length]);
+      }
+    }
+  }
+  for (var i = 0; i < this.active.length; i++) {
+    var p = this.active[i];
+    for (var c = 0; c < p.cells.length; c++) {
+      var cx = p.px + p.cells[c][0], cy = p.py + p.cells[c][1];
+      if (cy < 0) continue;
+      for (k = 0; k < cw; k++) put(g, x0 + cx * cw + k, y0 + cy, glyph[k % glyph.length]);
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// ASTEROIDS. Ship aims at the nearest rock and fires; hits split big into two
+// small. Vertical speeds are halved because character cells are twice as tall
+// as they are wide -- the same correction the real game makes.
+// ---------------------------------------------------------------------------
+function Asteroids(w, h) {
+  this.w = w; this.h = h;
+  this.ship = { x: w / 2, y: h / 2, a: 0 };
+  this.rocks = [];
+  this.shots = [];
+  this.score = 0;
+  this.cool = 0;
+  for (var i = 0; i < 4; i++) this.addRock();
+}
+Asteroids.prototype.addRock = function (x, y, size) {
+  var a = Math.random() * Math.PI * 2, sp = 0.10 + Math.random() * 0.10;
+  this.rocks.push({
+    x: x === undefined ? rint(this.w) : x,
+    y: y === undefined ? rint(this.h) : y,
+    vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.5,
+    size: size || 2
+  });
+};
+Asteroids.prototype.wrap = function (o) {
+  o.x = ((o.x % this.w) + this.w) % this.w;
+  o.y = ((o.y % this.h) + this.h) % this.h;
+};
+Asteroids.prototype.step = function () {
+  var i, self = this;
+  for (i = 0; i < this.rocks.length; i++) {
+    var r = this.rocks[i];
+    r.x += r.vx; r.y += r.vy; this.wrap(r);
+  }
+  // Aim at whatever is closest, in 45-degree steps like the real ship.
+  var near = null, nd = 1e9;
+  for (i = 0; i < this.rocks.length; i++) {
+    var dx = this.rocks[i].x - this.ship.x, dy = (this.rocks[i].y - this.ship.y) * 2;
+    var d = dx * dx + dy * dy;
+    if (d < nd) { nd = d; near = this.rocks[i]; }
+  }
+  if (near) {
+    var want = Math.atan2((near.y - this.ship.y) * 2, near.x - this.ship.x);
+    var oct = Math.round(want / (Math.PI / 4)) * (Math.PI / 4);
+    this.ship.a = oct;
+    if (--this.cool <= 0) {
+      this.cool = 9;
+      this.shots.push({
+        x: this.ship.x + Math.cos(oct), y: this.ship.y + Math.sin(oct) * 0.5,
+        vx: Math.cos(oct) * 1.0, vy: Math.sin(oct) * 0.5, life: 26
+      });
+    }
+  }
+  for (i = this.shots.length - 1; i >= 0; i--) {
+    var s = this.shots[i], gone = false;
+    for (var sub = 0; sub < 2 && !gone; sub++) {
+      s.x += s.vx / 2; s.y += s.vy / 2; this.wrap(s);
+      if (--s.life <= 0) { gone = true; break; }
+      for (var k = 0; k < this.rocks.length; k++) {
+        var rk = this.rocks[k];
+        var ddx = s.x - rk.x, ddy = (s.y - rk.y) * 2;
+        var rad = rk.size === 2 ? 1.7 : 1.1;
+        if (ddx * ddx + ddy * ddy <= rad * rad) {
+          this.rocks.splice(k, 1);
+          if (rk.size === 2) {
+            this.score += 20;
+            this.addRock(rk.x, rk.y, 1);
+            this.addRock(rk.x, rk.y, 1);
+          } else { this.score += 50; }
+          gone = true; break;
+        }
+      }
+    }
+    if (gone) this.shots.splice(i, 1);
+  }
+  if (this.rocks.length < 3 && Math.random() < 0.05) this.addRock();
+};
+Asteroids.prototype.draw = function (g) {
+  var i;
+  for (i = 0; i < this.rocks.length; i++) {
+    put(g, this.rocks[i].x, this.rocks[i].y, this.rocks[i].size === 2 ? 'O' : 'o');
+  }
+  for (i = 0; i < this.shots.length; i++) put(g, this.shots[i].x, this.shots[i].y, '.');
+  var TAU = Math.PI * 2, t = ((this.ship.a % TAU) + TAU) % TAU;
+  var oct = Math.round(t / (Math.PI / 4)) % 8;
+  put(g, this.ship.x, this.ship.y, ['>', '\\', 'v', '/', '<', '\\', '^', '/'][oct]);
+};
+
+// ---------------------------------------------------------------------------
+// HERO: an ASCII mock of the real tmux split that demonstrates the one idea
+// behind the whole plugin -- Claude works, you play; Claude asks, you freeze.
+// ---------------------------------------------------------------------------
+var LW = 42, RW = 34, BODY = 16;
+var TOOL_LINES = [
+  '* Read upload.ts',
+  '* Edit upload.ts',
+  '* Bash(npm test)',
+  '  32 passing',
+  '* Edit retry.ts',
+  '* Bash(npm test)'
+];
+var SPIN = ['-', '\\', '|', '/'];
+
+var heroEl = document.getElementById('hero');
+var capEl = document.getElementById('herocap');
+var GAMES = ['snake', 'tetris', 'asteroids'];
+var hero = { phase: 'work', t: 0, cycle: 0, sim: null, kind: '', spin: 0, answered: false };
+
+function heroNewGame() {
+  hero.kind = GAMES[hero.cycle % GAMES.length];
+  var gw = RW - 2, gh = BODY - 4;
+  if (hero.kind === 'snake') hero.sim = new Snake(gw, gh);
+  else if (hero.kind === 'tetris') hero.sim = new Tetris(Math.min(10, (gw / 2) | 0), gh, 1, true);
+  else hero.sim = new Asteroids(gw, gh);
+}
+heroNewGame();
+
+function heroFrame() {
+  var working = hero.phase === 'work';
+  hero.spin = (hero.spin + 1) % (SPIN.length * 3);
+  if (working) hero.sim.step();
+
+  // ---- left pane: a plausible Claude transcript --------------------------
+  var left = [];
+  left.push('> add retry logic to the uploader');
+  left.push('');
+  if (working) {
+    var shown = Math.min(TOOL_LINES.length, 1 + Math.floor(hero.t / 9));
+    for (var i = 0; i < shown; i++) left.push(TOOL_LINES[i]);
+    left.push('  ' + SPIN[(hero.spin / 3 | 0) % SPIN.length] + ' working');
+  } else {
+    left.push(TOOL_LINES[0]);
+    left.push(TOOL_LINES[1]);
+    left.push(TOOL_LINES[2]);
+    left.push('');
+    left.push('Allow Bash(npm publish)?');
+    left.push('');
+    left.push((hero.answered ? ' >' : ' >') + ' 1. Yes');
+    left.push('   2. No, tell Claude what to do');
+    if (hero.answered) left.push('');
+  }
+  while (left.length < BODY) left.push('');
+
+  // ---- right pane: the game, frozen unless Claude is working -------------
+  var gw = RW - 2, gh = BODY - 4;
+  var gg = grid(gw, gh, ' ');
+  if (hero.kind === 'tetris') hero.sim.draw(gg, 0, 0, 2);
+  else hero.sim.draw(gg);
+
+  var title = hero.kind.toUpperCase();
+  var right = [];
+  right.push(pad(' ' + title + (working ? '' : ' [PAUSED]') + '  ' + hero.sim.score, gw + 2));
+  right.push('+' + '-'.repeat(gw) + '+');
+  var grows = text(gg).split('\n');
+  for (var r = 0; r < gh; r++) right.push('|' + pad(grows[r] || '', gw).slice(0, gw) + '|');
+  right.push('+' + '-'.repeat(gw) + '+');
+  right.push(working ? ' arrows to play' : ' [PAUSED] Claude needs you');
+  while (right.length < BODY) right.push('');
+
+  // ---- stitch the two panes together ------------------------------------
+  var out = [];
+  out.push('+' + label(' CLAUDE ', LW) + '+' + label(' ' + title + ' ', RW) + '+');
+  for (var b = 0; b < BODY; b++) {
+    out.push('|' + pad(' ' + left[b], LW) + '|' + pad(right[b], RW) + '|');
+  }
+  out.push('+' + '-'.repeat(LW) + '+' + '-'.repeat(RW) + '+');
+  heroEl.textContent = out.join('\n');
+
+  var word = working ? 'WORKING' : 'PAUSED';
+  capEl.innerHTML = '~/.claude-coplay/sessions/a1b2c3d4.state &rarr; <b class="' +
+    (working ? '' : 'p') + '">' + word + '</b>' +
+    '<span class="dim">' + (working ? '   the game runs, and the keyboard is in its pane' :
+      '   the game is frozen, and the keyboard is back with Claude') + '</span>';
+
+  // ---- phase timing ------------------------------------------------------
+  hero.t++;
+  if (working && hero.t > 78) { hero.phase = 'ask'; hero.t = 0; hero.answered = false; }
+  else if (!working && hero.t === 46) { hero.answered = true; }
+  else if (!working && hero.t > 56) {
+    hero.phase = 'work'; hero.t = 0; hero.cycle++; heroNewGame();
+  }
+}
+function label(s, width) {
+  return (s + '-'.repeat(Math.max(0, width - s.length))).slice(0, width);
+}
+
+// ---------------------------------------------------------------------------
+// The three small game panes in "the games".
+// ---------------------------------------------------------------------------
+function Panel(elId, kind, w, h) {
+  this.el = document.getElementById(elId);
+  this.kind = kind; this.w = w; this.h = h;
+  this.make();
+}
+Panel.prototype.make = function () {
+  if (this.kind === 'snake') this.sim = new Snake(this.w, this.h);
+  else if (this.kind === 'tetris') this.sim = new Tetris(Math.min(10, (this.w / 2) | 0), this.h, 1, true);
+  else this.sim = new Asteroids(this.w, this.h);
+};
+Panel.prototype.frame = function () {
+  this.sim.step();
+  var g = grid(this.w, this.h, ' ');
+  if (this.kind === 'tetris') this.sim.draw(g, 0, 0, 2);
+  else this.sim.draw(g);
+  var rows = text(g).split('\n');
+  var out = ['+' + '-'.repeat(this.w) + '+'];
+  for (var y = 0; y < this.h; y++) out.push('|' + pad(rows[y] || '', this.w) + '|');
+  out.push('+' + '-'.repeat(this.w) + '+');
+  out.push(' score ' + this.sim.score);
+  this.el.textContent = out.join('\n');
+};
+var panels = [
+  new Panel('d-snake', 'snake', 22, 11),
+  new Panel('d-tetris', 'tetris', 20, 11),
+  new Panel('d-asteroids', 'asteroids', 22, 11)
+];
+
+// ---------------------------------------------------------------------------
+// AMBIENT layer: snake winding around, tetris falling down one side, rocks
+// splitting here and there. Sized to the viewport, redrawn on resize.
+// ---------------------------------------------------------------------------
+var ambEl = document.getElementById('ambient');
+var blkEl = document.getElementById('blocks');
+var amb = null;
+function ambientBuild() {
+  var cw = 7.8, ch = 15;                       // measured-ish character box
+  var w = Math.max(40, Math.floor(window.innerWidth / cw));
+  var h = Math.max(20, Math.floor(window.innerHeight / ch));
+  // The content column is opaque, so anything drawn behind it is invisible.
+  // Work out that dead band and keep the action either side of it.
+  var bandCols = 90;
+  var bandL = Math.floor((w - bandCols) / 2), bandR = bandL + bandCols;
+  amb = {
+    w: w, h: h,
+    snakes: [],
+    tetris: new Tetris((w / 2) | 0, h, Math.max(6, Math.min(22, Math.round(w / 12))), false),
+    rocks: new Asteroids(w, h),
+    tcol: 0                                    // the well spans the full width
+  };
+  // Scale the rock field to the viewport, otherwise a handful of rocks is
+  // lost in a grid this size.
+  var want = Math.max(8, Math.min(26, Math.round(w * h / 700)));
+  while (amb.rocks.rocks.length < want) amb.rocks.addRock();
+
+  // Several snakes, each its own independent autopilot. They ignore each
+  // other and simply cross over -- at this contrast it reads as tangling
+  // rather than as a bug, and keeping them independent costs nothing.
+  var count = Math.max(2, Math.min(6, Math.round(w / 45)));
+  for (var n = 0; n < count; n++) {
+    var sn = new Snake(w, h);
+    // Spread their starting points, and keep their food out from behind the
+    // content column so they stay where they can be seen.
+    sn.body = [{ x: rint(w), y: rint(h) }];
+    sn.foodOk = function (x) { return x < bandL - 2 || x > bandR + 2; };
+    sn.place();
+    // Visibly different sizes, and long enough to read as "winding around"
+    // rather than as a few stray characters.
+    var want = 16 + n * 9;
+    sn.grow(want);
+    for (var i = 0; i < want + 50; i++) sn.step();
+    amb.snakes.push(sn);
+  }
+}
+function ambientFrame() {
+  if (!amb) return;
+  for (var i = 0; i < amb.snakes.length; i++) amb.snakes[i].step();
+  amb.tetris.step();
+  amb.tetris.step();
+  amb.rocks.step();
+  var g = grid(amb.w, amb.h, ' ');
+  amb.rocks.draw(g);
+  ambEl.textContent = text(g);
+  // The snakes share the brighter layer with the blocks, and are drawn last
+  // so they read as passing in front of them.
+  var gb = grid(amb.w, amb.h, ' ');
+  amb.tetris.draw(gb, amb.tcol, 0, 2);
+  for (var k = 0; k < amb.snakes.length; k++) amb.snakes[k].draw(gb);
+  blkEl.textContent = text(gb);
+}
+ambientBuild();
+var rtimer;
+window.addEventListener('resize', function () {
+  clearTimeout(rtimer);
+  rtimer = setTimeout(ambientBuild, 180);
+});
+
+// ---------------------------------------------------------------------------
+// One clock for everything, each surface at its own rate. Pauses itself when
+// the tab is hidden so it costs nothing in the background.
+// ---------------------------------------------------------------------------
+var acc = { hero: 0, panels: 0, amb: 0 }, last = performance.now();
+function loop(now) {
+  var dt = Math.min(200, now - last);
+  last = now;
+  if (!document.hidden) {
+    acc.hero += dt; acc.panels += dt; acc.amb += dt;
+    if (acc.hero >= 70) { acc.hero = 0; heroFrame(); }
+    if (acc.panels >= 110) { acc.panels = 0; panels.forEach(function (p) { p.frame(); }); }
+    if (acc.amb >= 150) { acc.amb = 0; ambientFrame(); }
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

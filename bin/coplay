@@ -1,0 +1,51 @@
+#!/bin/sh
+# Start Claude Code inside tmux, so coplay has a pane to split into.
+#
+# The plugin's games need a tmux pane, and a Claude session that is already
+# running outside tmux cannot be moved into one. This is the one-command way in:
+# it starts (or reattaches to) a tmux session and runs Claude inside it.
+#
+#   coplay              start a fresh Claude session inside tmux
+#   coplay --continue   pick up your most recent conversation instead
+#   coplay -- <args>    pass anything else straight through to claude
+#
+# Install it on your PATH if you like:
+#   ln -s ~/.claude/skills/coplay/bin/coplay /usr/local/bin/coplay
+
+set -u
+
+SESSION=coplay
+
+if ! command -v tmux >/dev/null 2>&1; then
+  echo "coplay needs tmux, which is not installed."
+  echo "  macOS:          brew install tmux"
+  echo "  Debian/Ubuntu:  sudo apt install tmux"
+  exit 1
+fi
+if ! command -v claude >/dev/null 2>&1; then
+  echo "coplay could not find 'claude' on your PATH."
+  echo "Install Claude Code first: https://claude.com/claude-code"
+  exit 1
+fi
+
+if [ -n "${TMUX:-}" ]; then
+  echo "You are already inside tmux - just type /snake, /tetris or /asteroids."
+  exit 0
+fi
+
+# Reattach rather than nesting a second session on top of an existing one.
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "Reattaching to the existing '$SESSION' tmux session..."
+  exec tmux attach-session -t "$SESSION"
+fi
+
+# Strip a leading -- so `coplay -- --model opus` works as you would expect.
+if [ "${1:-}" = "--" ]; then shift; fi
+
+quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+CMD="claude"
+for arg in "$@"; do CMD="$CMD $(quote "$arg")"; done
+
+echo "Starting Claude inside tmux (session: $SESSION)."
+echo "Type /snake, /tetris or /asteroids once it is up."
+exec tmux new-session -s "$SESSION" "$CMD"

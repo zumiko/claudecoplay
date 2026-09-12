@@ -1,0 +1,19 @@
+{
+  "name": "coplay",
+  "description": "coplay: play ASCII games in a tmux pane while Claude Code works, auto-pausing the instant Claude needs you.",
+  "owner": {
+    "name": "zumiko",
+    "url": "https://github.com/zumiko"
+  },
+  "plugins": [
+    {
+      "name": "coplay",
+      "source": "./",
+      "description": "Play Snake, Tetris or Asteroids in a tmux pane while Claude Code works. The game freezes the instant Claude needs your attention and resumes when it gets back to work.",
+      "version": "0.3.0",
+      "license": "MIT",
+      "keywords": ["games", "tmux", "snake", "tetris", "asteroids", "attention", "focus"],
+      "category": "productivity"
+    }
+  ]
+}
